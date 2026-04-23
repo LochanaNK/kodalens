@@ -13,6 +13,8 @@ export default function Home() {
   const [results, setResults] = useState<SearchResults[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [itemsToDisplay, setItemsToDisplay] = useState(1);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +23,7 @@ export default function Home() {
     setLoading(true);
     setHasSearched(true);
     try {
-      const data = await api.search(query);
+      const data = await api.search(query, Number(itemsToDisplay));
       setResults(data.results);
     } catch (err) {
       console.error(err);
@@ -32,11 +34,15 @@ export default function Home() {
   };
 
   const handleSync = async () => {
+    if(isSyncing) return;
+    setIsSyncing(true);
     try {
       const res = await api.sync();
       alert(res.details);
     } catch (err) {
       alert("Sync failed. Check your GitHub CLI (gh) auth status.");
+    } finally {
+      setTimeout(() => setIsSyncing(false),2000);
     }
   };
 
@@ -78,9 +84,30 @@ export default function Home() {
           </button>
         </form>
 
+        {/* Items Per Page Dropdown */}
+        {hasSearched && results.length > 0 && (
+          <div className="mb-8 flex items-center gap-3">
+            <label htmlFor="items-dropdown" className="text-sm font-semibold text-gray-700">
+              Items per page:
+            </label>
+            <select
+              id="items-dropdown"
+              value={itemsToDisplay}
+              onChange={(e) => setItemsToDisplay(Number(e.target.value))}
+              className="px-4 py-2 border-2 border-gray-200 rounded-lg text-gray-900 focus:border-blue-500 focus:outline-none transition-colors bg-white shadow-sm hover:border-gray-300"
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
+                <option key={num} value={num}>
+                  {num}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Results List */}
         <div className="space-y-8">
-          {results.map((res, index) => {
+          {results.slice(0, itemsToDisplay).map((res, index) => {
             // Parse the JSON content from ChromaDB
             const data = JSON.parse(res.content);
 
@@ -97,7 +124,7 @@ export default function Home() {
                   </div>
                   <div className="text-right">
                     <span className="text-xs font-bold px-3 py-1 rounded-full bg-green-50 text-green-700 border border-green-100">
-                      Distance {res.distance}
+                      Chroma Distance {res.distance}
                     </span>
                     <p className="text-[10px] text-gray-400 mt-2 font-mono">{res.id}</p>
                   </div>
@@ -106,14 +133,14 @@ export default function Home() {
                 {/* Content Sections */}
                 <div className="space-y-6 text-gray-800 w-full">
                   <section>
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-1">🔍 The Problem</h3>
-                    <p className="text-lg leading-relaxed">{data.problem_description}</p>
+                    <h3 className="text-lg font-bold text-gray-700 uppercase tracking-wide mb-1">🔍 The Problem</h3>
+                    <p className="text-md leading-relaxed">{data.problem_description}</p>
                   </section>
 
-                  <section className="grid md:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-xl">
-                    <div>
-                      <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">💡 Root Cause</h3>
-                      <div className="text-sm prose prose-slate prose-sm">
+                  <section className=" gap-6 bg-gray-50 p-4 rounded-xl">
+                    <div className="mb-5">
+                      <h3 className="text-lg font-bold text-gray-700 uppercase mb-2">💡 Root Cause</h3>
+                      <div className="text-md prose prose-slate prose-sm">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
@@ -143,11 +170,13 @@ export default function Home() {
                       </div>
                     </div>
                     <div>
-                      <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">🛠 Implementation</h3>
-                      <div className="text-sm prose prose-slate prose-sm">
+                      <h3 className="text-lg font-bold text-gray-700 uppercase mb-2">🛠 Implementation</h3>
+                      <div className="text-md prose prose-slate prose-sm">
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
+                            p: ({ children }) => <div className="mb-4">{children}</div>,
+                            pre: ({ children }) => <div className="not-prose">{children}</div>,
                             code({ node, inline, className, children, ...props }: any) {
                               const match = /language-(\w+)/.exec(className || '');
                               return !inline && match ? (
@@ -160,9 +189,13 @@ export default function Home() {
                                   {String(children).replace(/\n$/, '')}
                                 </SyntaxHighlighter>
                               ) : (
-                                <code className={className} {...props}>
-                                  {children}
-                                </code>
+                                <div className="bg-slate-800 p-5 rounded-lg my-4 overflow-x-auto">
+                                  <code className=" text-white px-1.5 py-0.5 rounded font-mono text-sm"
+                                    {...props}
+                                  >
+                                    {children}
+                                  </code>
+                                </div>
                               );
                             },
                           }}
@@ -176,8 +209,8 @@ export default function Home() {
                   </section>
 
                   <section>
-                    <h3 className="text-xs font-bold text-gray-500 uppercase mb-1">✅ Verification</h3>
-                    <p className="text-sm text-gray-600 italic">{data.resolution.verification}</p>
+                    <h3 className="text-lg font-bold text-gray-700 uppercase mb-1">✅ Verification</h3>
+                    <p className="text-md text-gray-600 italic">{data.resolution.verification}</p>
                   </section>
                 </div>
 
@@ -192,6 +225,12 @@ export default function Home() {
           {hasSearched && results.length === 0 && !loading && (
             <div className="text-center py-20 text-gray-400">
               No matching resolution logs found.
+            </div>
+          )}
+
+          {results.length > itemsToDisplay && (
+            <div className="text-center py-8 text-sm text-gray-500">
+              Showing {itemsToDisplay} of {results.length} results
             </div>
           )}
         </div>
